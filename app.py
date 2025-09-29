@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_mysqldb import MySQL
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -100,7 +100,7 @@ def actorDetails(actor_id):
         cur.close()
         return jsonify({"error": "Actor not found"}), 404
 
-    #Get films details based on the actor, they're top five most rented films
+    # Get films details based on the actor, they're top five most rented films
     films = """
     SELECT f.title, COUNT(r.rental_id) AS rentals
     FROM film f
@@ -127,6 +127,44 @@ def actorDetails(actor_id):
             {"title": row[0], "rentals": row[1]} for row in film_rows
         ]
     })
+
+# FILMS TABLE -------------------------------------------------------------
+@app.route("/filmsTable", methods=["GET"])
+def filmsTable():
+    cur = mysql.connection.cursor()
+
+    # Makes 20 films show on each page and an offset so past pages and info don't repeat
+    perPage = 20
+    page = int(request.args.get("page", 1))
+    offset = (page - 1) * perPage
+
+    query = """
+    SELECT f.film_id, f.title, c.name AS category
+    FROM film f
+    JOIN film_category fc ON f.film_id = fc.film_id
+    JOIN category c ON fc.category_id = c.category_id
+    ORDER BY f.film_id ASC
+    LIMIT %s OFFSET %s;
+    """
+
+    # Query through and get the films for each page
+    cur.execute(query, (perPage, offset))
+    rows = cur.fetchall()
+    # Gets all films number but because it returns as a tuple we take the first (0) index.
+    cur.execute("SELECT COUNT(*) FROM film;")
+    total_films = cur.fetchone()[0]
+
+
+    return jsonify({
+    "current_page": page,
+    "films_per_page": perPage,
+    "total": total_films,
+    "films": [
+        {"film_id": row[0], "title": row[1], "category": row[2]}
+        for row in rows
+    ] 
+    })
+
 
 if __name__ == "__main__":
     app.run(debug=True)
