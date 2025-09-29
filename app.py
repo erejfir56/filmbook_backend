@@ -146,7 +146,6 @@ def filmsTable():
     ORDER BY f.film_id ASC
     LIMIT %s OFFSET %s;
     """
-
     # Query through and get the films for each page
     cur.execute(query, (perPage, offset))
     rows = cur.fetchall()
@@ -165,6 +164,54 @@ def filmsTable():
     ] 
     })
 
+# FILMS TABLE DETAILS -------------------------------------------------------------
+# TO DO: Comments and look into rental count and 
+@app.route("/film/<int:film_id>", methods=["GET"])
+def filmDetails(film_id):
+    cur = mysql.connection.cursor()
+    
+    cur.execute("""
+        SELECT f.film_id, f.title, f.description, f.release_year, f.length, 
+               f.rating, f.rental_rate, f.replacement_cost,
+               l.name AS language, c.name AS category
+        FROM film f
+        JOIN language l ON f.language_id = l.language_id
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+        WHERE f.film_id = %s
+    """, (film_id,))
+    
+    # Getting ID for film to get actors
+    film_row = cur.fetchone()
+    cur.execute("""
+        SELECT a.actor_id, a.first_name, a.last_name
+        FROM actor a
+        JOIN film_actor fa ON a.actor_id = fa.actor_id
+        WHERE fa.film_id = %s
+        ORDER BY a.last_name ASC, a.first_name ASC
+    """, (film_id,))
+    
+    # Getting actors for search feature later
+    actor_rows = cur.fetchall()
+    
+    return jsonify({
+        "film": {
+            "film_id": film_row[0],
+            "title": film_row[1],
+            "description": film_row[2],
+            "release_year": film_row[3],
+            "length": film_row[4],
+            "rating": film_row[5],
+            "rental_rate": float(film_row[6]),
+            "replacement_cost": float(film_row[7]),
+            "language": film_row[8],
+            "category": film_row[9]
+        },
+        "actors": [
+            {"actor_id": r[0], "first_name": r[1], "last_name": r[2]} 
+            for r in actor_rows
+        ]
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
