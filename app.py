@@ -213,5 +213,95 @@ def filmDetails(film_id):
         ]
     })
 
+# CUSTOMERS TABLE -------------------------------------------------------------
+@app.route("/customersTable", methods=["GET"])
+def customersTable():
+    cur = mysql.connection.cursor()
+    perPage = 20
+    page = int(request.args.get("page", 1))
+    offset = (page - 1) * perPage
+
+    cur.execute("""
+        SELECT customer_id, store_id, first_name, last_name, email, address_id, active, create_date, last_update
+        FROM customer
+        ORDER BY customer_id ASC
+        LIMIT %s OFFSET %s
+    """, (perPage, offset))
+
+    rows = cur.fetchall()
+    cur.execute("SELECT COUNT(*) FROM customer;")
+    total_customers = cur.fetchone()[0]
+    cur.close()
+
+    return jsonify({
+        "current_page": page,
+        "customers_per_page": perPage,
+        "total": total_customers,
+        "customers": [
+            {
+                "customer_id": r[0],
+                "store_id": r[1],
+                "first_name": r[2],
+                "last_name": r[3],
+                "email": r[4],
+                "address_id": r[5],
+                "active": bool(r[6]),
+                "create_date": str(r[7]),
+                "last_update": str(r[8])
+            }
+            for r in rows
+        ]
+    })
+
+
+# CUSTOMERS TABLE ADD CUSTOMER -------------------------------------------------------------
+@app.route("/customers", methods=["POST"])
+def addCustomer():
+    data = request.json
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    email = data.get("email")
+    store_id = data.get("store_id", 1)
+    address_id = data.get("address_id", 1)
+    active = data.get("active", True)
+
+    if not first_name or not last_name or not email:
+        return jsonify({"error": "Please fill all fields"}), 400
+
+    cur = mysql.connection.cursor()
+    # We put current date and time with NOW then commit
+    cur.execute("""
+        INSERT INTO customer (store_id, first_name, last_name, email, address_id, active, create_date)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW()) 
+    """, (store_id, first_name, last_name, email, address_id, active))
+    mysql.connection.commit()
+
+    cur.execute("SELECT LAST_INSERT_ID();")
+    customer_id = cur.fetchone()[0]
+    cur.close()
+
+    return jsonify({
+        "customer_id": customer_id,
+        "store_id": store_id,
+        "first_name": first_name,
+        "last_name": last_name,
+        "email": email,
+        "address_id": address_id,
+        "active": active,
+        "create_date": None,
+        "last_update": None
+    })
+
+
+# DELETE CUSTOMER -------------------------------------------------------------
+@app.route("/customers/<int:customer_id>", methods=["DELETE"])
+def deleteCustomer(customer_id):
+    cur = mysql.connection.cursor()
+    cur.execute("DELETE FROM customer WHERE customer_id = %s", (customer_id,))
+    mysql.connection.commit()
+    cur.close()
+    return jsonify({"message": "Customer has been successfully deleted"})
+
+
 if __name__ == "__main__":
     app.run(debug=True)
