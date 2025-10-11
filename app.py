@@ -137,21 +137,54 @@ def filmsTable():
     perPage = 20
     page = int(request.args.get("page", 1))
     offset = (page - 1) * perPage
+    search = request.args.get("search", "").strip()
 
-    query = """
-    SELECT f.film_id, f.title, c.name AS category
-    FROM film f
-    JOIN film_category fc ON f.film_id = fc.film_id
-    JOIN category c ON fc.category_id = c.category_id
-    ORDER BY f.film_id ASC
-    LIMIT %s OFFSET %s;
-    """
-    # Query through and get the films for each page
-    cur.execute(query, (perPage, offset))
-    rows = cur.fetchall()
-    # Gets all films number but because it returns as a tuple we take the first (0) index.
-    cur.execute("SELECT COUNT(*) FROM film;")
-    total_films = cur.fetchone()[0]
+    # Make search if else so that way if we are searching we are showing those results, else we show normal as before just pagination
+    if search:
+        query = """
+        SELECT DISTINCT f.film_id, f.title, c.name AS category 
+        FROM film f
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+        LEFT JOIN film_actor fa ON f.film_id = fa.film_id
+        LEFT JOIN actor a ON fa.actor_id = a.actor_id
+        WHERE f.title LIKE %s
+           OR c.name LIKE %s
+           OR CONCAT(a.first_name, ' ', a.last_name) LIKE %s
+        ORDER BY f.film_id ASC
+        LIMIT %s OFFSET %s;
+        """
+        cur.execute(query, (f"%{search}%", f"%{search}%", f"%{search}%", perPage, offset))
+        rows = cur.fetchall()
+
+        cur.execute("""
+        SELECT COUNT(DISTINCT f.film_id)
+        FROM film f
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+        LEFT JOIN film_actor fa ON f.film_id = fa.film_id
+        LEFT JOIN actor a ON fa.actor_id = a.actor_id
+        WHERE f.title LIKE %s
+           OR c.name LIKE %s
+           OR CONCAT(a.first_name, ' ', a.last_name) LIKE %s;
+        """, (f"%{search}%", f"%{search}%", f"%{search}%"))
+        total_films = cur.fetchone()[0]
+    else:
+
+        query = """
+        SELECT f.film_id, f.title, c.name AS category
+        FROM film f
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+        ORDER BY f.film_id ASC
+        LIMIT %s OFFSET %s;
+        """
+        # Query through and get the films for each page
+        cur.execute(query, (perPage, offset))
+        rows = cur.fetchall()
+        # Gets all films number but because it returns as a tuple we take the first (0) index.
+        cur.execute("SELECT COUNT(*) FROM film;")
+        total_films = cur.fetchone()[0]
 
 
     return jsonify({
