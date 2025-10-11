@@ -253,17 +253,45 @@ def customersTable():
     perPage = 20
     page = int(request.args.get("page", 1))
     offset = (page - 1) * perPage
+    search = request.args.get("search", "").strip()
 
-    cur.execute("""
+    if search: 
+        query = """
         SELECT customer_id, store_id, first_name, last_name, email, address_id, active, create_date, last_update
         FROM customer
+        WHERE first_name LIKE %s
+           OR last_name LIKE %s
+           OR email LIKE %s
+           OR CAST(customer_id AS CHAR) LIKE %s
         ORDER BY customer_id ASC
-        LIMIT %s OFFSET %s
-    """, (perPage, offset))
+        LIMIT %s OFFSET %s;
+        """
+        cur.execute(query, (f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", perPage, offset))
+        rows = cur.fetchall()
 
-    rows = cur.fetchall()
-    cur.execute("SELECT COUNT(*) FROM customer;")
-    total_customers = cur.fetchone()[0]
+        # Count total filtered results for pagination
+        count_query = """
+        SELECT COUNT(*)
+        FROM customer
+        WHERE first_name LIKE %s
+           OR last_name LIKE %s
+           OR email LIKE %s
+           OR CAST(customer_id AS CHAR) LIKE %s;
+        """
+        cur.execute(count_query, (f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%"))
+        total_customers = cur.fetchone()[0]
+
+    else:
+        cur.execute("""
+            SELECT customer_id, store_id, first_name, last_name, email, address_id, active, create_date, last_update
+            FROM customer
+            ORDER BY customer_id ASC
+            LIMIT %s OFFSET %s
+        """, (perPage, offset))
+
+        rows = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM customer;")
+        total_customers = cur.fetchone()[0]
     cur.close()
 
     return jsonify({
