@@ -224,7 +224,6 @@ def filmDetails(film_id):
         ORDER BY a.last_name ASC, a.first_name ASC
     """, (film_id,))
     
-    # Getting actors for search feature later
     actor_rows = cur.fetchall()
     
     return jsonify({
@@ -269,7 +268,6 @@ def customersTable():
         cur.execute(query, (f"%{search}%", f"%{search}%", f"%{search}%", f"%{search}%", perPage, offset))
         rows = cur.fetchall()
 
-        # Count total filtered results for pagination
         count_query = """
         SELECT COUNT(*)
         FROM customer
@@ -314,7 +312,6 @@ def customersTable():
         ]
     })
 
-
 # CUSTOMERS TABLE ADD CUSTOMER -------------------------------------------------------------
 @app.route("/customers", methods=["POST"])
 def addCustomer():
@@ -353,7 +350,6 @@ def addCustomer():
         "last_update": None
     })
 
-
 # DELETE CUSTOMER -------------------------------------------------------------
 @app.route("/customers/<int:customer_id>", methods=["DELETE"])
 def deleteCustomer(customer_id):
@@ -363,6 +359,94 @@ def deleteCustomer(customer_id):
     cur.close()
     return jsonify({"message": "Customer has been successfully deleted"})
 
+# RENT TO CUSTOMER --------------------------------------------------------------
+@app.route("/rentFilm", methods=["POST"])
+def rentFilm():
+    data = request.json
+    customer_id = data.get("customer_id")
+    film_id = data.get("film_id")
+
+    if not customer_id:
+        return jsonify({"error" : "Customer ID does not exist!"}), 400
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT i.inventory_id
+        FROM inventory i
+        LEFT JOIN rental r ON i.inventory_id = r.inventory_id AND r.return_date IS NULL
+        WHERE i.film_id = %s AND r.rental_id IS NULL
+        LIMIT 1;
+    """, (film_id,))
+    
+    available = cur.fetchone()
+
+    if not available: 
+        cur.close()
+        return jsonify({"error": "There are no more copies available to rent"})
+
+    inventory_id = available[0]
+    cur.execute("""
+        INSERT INTO rental (rental_date, inventory_id, customer_id, return_date, staff_id)
+        VALUES (NOW(), %s, %s, NULL, 1);
+                """, (inventory_id, customer_id))
+    
+    mysql.connection.commit()
+
+    return jsonify({"message" : "Film rented"})
+
+# RETURN FILM --------------------------------------------------------------
+@app.route("/returnFilm", methods=["POST"])
+def returnFilm():
+    data = request.json
+    customer_id = data.get("customer_id")
+    film_id = data.get("film_id")
+
+    if not customer_id:
+        return jsonify({"error" : "Customer ID does not exist!"}), 400
+    cur = mysql.connection.cursor()
+    cur.execute(""" 
+        SELECT r.rental_id
+        FROM rental r
+        JOIN inventory i on r.inventory_id = i.inventory_id
+        WHERE r.customer_id = %s AND i.film_id = %s AND r.return_date IS NULL
+        LIMIT 1;
+        """, (customer_id, film_id))
+    rental = cur.fetchone()
+
+    if not rental:
+        cur.close()
+        return jsonify({"error" : "This customer is not renting this film at this time"}), 400
+
+    rental_id = rental[0]
+
+    cur.execute("""
+        UPDATE rental
+        SET return_date = NOW()
+        WHERE rental_id = %s;
+        """, (rental_id,))
+    mysql.connection.commit()
+
+    return jsonify({"message" : "Film returned"})
+
+# CUSTOMER RENTED FILMS -------------------------------------------------------------
+@app.route("/customer/<int:customer_id>/rentedFilms", methods=["GET"])
+def getRentedFilms(customer_id):
+    cur = mysql.connection.cursor()
+    query = """
+        SELECT f.film_id, f.title, f.release_year, f.rating
+        FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        WHERE r.customer_id = %s AND r.return_date IS NULL
+        ORDER BY r.rental_date DESC;
+    """
+    cur.execute(query, (customer_id,))
+    rows = cur.fetchall()
+    cur.close()
+
+    return jsonify([
+        {"film_id": r[0], "title": r[1], "release_year": r[2], "rating": r[3]}
+        for r in rows
+    ])
 
 if __name__ == "__main__":
     app.run(debug=True)
