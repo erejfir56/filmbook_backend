@@ -448,5 +448,34 @@ def getRentedFilms(customer_id):
         for r in rows
     ])
 
+# UPDATE CUSTOMER DETAILS ---------------------------------------------------------------
+
+@app.route("/customers/<int:customer_id>", methods=["PUT"])
+def updateCustomer(customer_id):
+    data = request.json
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
+    email = data.get("email")
+    store_id = data.get("store_id")
+    address_id = data.get("address_id")
+    active = data.get("active")
+
+    if not first_name or not last_name or not email or not email or not store_id or not active:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        UPDATE customer
+        SET first_name=%s, last_name=%s, email=%s, store_id=%s, address_id=%s, active=%s, last_update=NOW()
+        WHERE customer_id=%s
+    """, (first_name, last_name, email, store_id, address_id, active, customer_id))
+    mysql.connection.commit()
+    
+
+    return jsonify({"message": "Customer updated successfully"})
+
+
+
+
 if __name__ == "__main__":
     app.run(debug=True)
