@@ -475,7 +475,32 @@ def updateCustomer(customer_id):
     return jsonify({"message": "Customer updated successfully"})
 
 
+# CUSTOMER RENTED FILMS HISTORY -------------------------------------------------------
+@app.route("/customer/<int:customer_id>/pastRentedFilms", methods=["GET"])
+def getPastRentedFilms(customer_id):
+    cur = mysql.connection.cursor()
+    query = """
+        SELECT f.film_id, f.title, f.release_year, f.rating, r.rental_date, r.return_date
+        FROM rental r
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        WHERE r.customer_id = %s AND r.return_date IS NOT NULL
+        ORDER BY r.rental_date DESC;
+    """
+    cur.execute(query, (customer_id,))
+    rows = cur.fetchall()
 
+    return jsonify([
+        {
+            "film_id": r[0],
+            "title": r[1],
+            "release_year": r[2],
+            "rating": r[3],
+            "rental_date": str(r[4]),
+            "return_date": str(r[5])
+        }
+        for r in rows
+    ])
 
 if __name__ == "__main__":
     app.run(debug=True)
